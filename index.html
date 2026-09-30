@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>恋人心动日 · 小游戏</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #fff6fb;
+        --card: #ffffff;
+        --text: #4a2a3a;
+        --accent: #ff5c93;
+        --accent-soft: #ffd9e8;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        background: radial-gradient(circle at top, #ffe8f2, var(--bg));
+        color: var(--text);
+        padding: 20px;
+      }
+
+      .game {
+        width: min(700px, 100%);
+        background: var(--card);
+        border-radius: 20px;
+        padding: 24px;
+        box-shadow: 0 12px 40px rgba(255, 92, 147, 0.15);
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 1.8rem;
+      }
+
+      .subtitle {
+        margin: 0 0 16px;
+        opacity: 0.8;
+      }
+
+      .status {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+      }
+
+      .pill {
+        background: var(--accent-soft);
+        color: #7c2350;
+        border-radius: 999px;
+        padding: 8px 14px;
+        font-size: 0.95rem;
+        font-weight: 600;
+      }
+
+      #replayStatus {
+        min-width: 0;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+      }
+
+      .scene {
+        background: #fffafd;
+        border: 1px solid #ffe0ed;
+        border-radius: 14px;
+        padding: 18px;
+        min-height: 130px;
+        line-height: 1.7;
+      }
+
+      .choices {
+        margin-top: 16px;
+        display: grid;
+        gap: 10px;
+      }
+
+      button {
+        border: none;
+        background: #ffe1ee;
+        color: #661838;
+        border-radius: 12px;
+        padding: 12px;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: transform 0.1s ease, background 0.2s ease;
+      }
+
+      button:hover {
+        transform: translateY(-2px);
+        background: #ffd0e5;
+      }
+
+      button.primary {
+        background: var(--accent);
+        color: white;
+      }
+
+      .result {
+        margin-top: 16px;
+        padding: 14px;
+        border-radius: 12px;
+        background: #fff0f7;
+        border: 1px dashed #ff9cc2;
+      }
+
+      .footer {
+        margin-top: 10px;
+        font-size: 0.9rem;
+        opacity: 0.7;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="game">
+      <h1>💞 恋人心动日</h1>
+      <p class="subtitle">陪 TA 过一天，看看你们会走向哪个甜蜜结局！</p>
+
+      <section class="status">
+        <div class="pill">好感度：<span id="loveScore">0</span></div>
+        <div class="pill">当前场景：<span id="sceneIndex">1</span>/3</div>
+        <div class="pill" id="replayStatus">第 1 次约会 · 雨天散步 · 结局 0/5</div>
+      </section>
+
+      <article id="scene" class="scene"></article>
+      <section id="choices" class="choices"></section>
+      <section id="result" class="result" aria-live="polite" hidden></section>
+      <p class="footer">小提示：分数和选择组合都会影响结局；再玩一次会开启不同日程。本页记录刷新后重置。</p>
+    </main>
+
+    <script>
+      const steps = [
+        {
+          text: "早晨，恋人揉着眼睛问你：今天我们先做什么？",
+          options: [
+            { label: "做一份爱心早餐", score: 2 },
+            { label: "继续赖床，抱抱五分钟", score: 1 },
+            { label: "催 TA 快点出门", score: -1 },
+          ],
+        },
+        {
+          text: "午后散步时突然下小雨，你会？",
+          options: [
+            { label: "把外套给 TA，拉着跑去咖啡店", score: 2 },
+            { label: "一起在雨里慢慢走", score: 1 },
+            { label: "各自打车回家", score: -1 },
+          ],
+        },
+        {
+          text: "晚上准备休息，TA 想听一句睡前话。",
+          options: [
+            { label: "“今天也超喜欢你，晚安。”", score: 2 },
+            { label: "“辛苦啦，明天见。”", score: 1 },
+            { label: "“我先打游戏了。”", score: -2 },
+          ],
+        },
+      ];
+
+      const endings = [
+        { min: 5, title: "心动满分结局", text: "你们默契爆棚！今天像一部甜甜恋爱电影。" },
+        { min: 2, title: "温柔稳定结局", text: "平淡但舒服，爱藏在每个小细节里。" },
+        { min: -99, title: "需要加油结局", text: "别担心，下一次多点关心就能逆风翻盘！" },
+      ];
+
+      // 每套日程保留三段、每段三个选项，以及原有的分值顺序。
+      // 第二个选项始终代表安静陪伴；首段第三项与末段第一项构成和解线。
+      const dates = [
+        { name: "雨天散步", steps },
+        {
+          name: "海边晚风",
+          steps: [
+            {
+              text: "早晨，TA 抱着野餐篮问：出发去海边前，要准备什么？",
+              options: [
+                { label: "一起准备 TA 喜欢的点心", score: 2 },
+                { label: "并肩坐一会儿，慢慢商量路线", score: 1 },
+                { label: "嫌准备太慢，催 TA 赶紧走", score: -1 },
+              ],
+            },
+            {
+              text: "午后到了海边，风吹乱了野餐垫，TA 有些无措。",
+              options: [
+                { label: "一起收好东西，找个避风的位置", score: 2 },
+                { label: "收起垫子，牵手沿海岸慢慢走", score: 1 },
+                { label: "让 TA 自己收拾，先走开", score: -1 },
+              ],
+            },
+            {
+              text: "夜里回家，TA 问：今天有什么想对我说的吗？",
+              options: [
+                { label: "认真说出在乎，也为今天的疏忽道歉", score: 2 },
+                { label: "“一起听海的那会儿，我很喜欢。”", score: 1 },
+                { label: "“没什么，我先玩手机。”", score: -2 },
+              ],
+            },
+          ],
+        },
+        {
+          name: "书店寻宝",
+          steps: [
+            {
+              text: "早晨，TA 说想去旧书店，问你愿不愿意一起。",
+              options: [
+                { label: "记下 TA 想找的书，一起出发", score: 2 },
+                { label: "“好，我们慢慢逛，不赶时间。”", score: 1 },
+                { label: "抱怨太无聊，勉强答应", score: -1 },
+              ],
+            },
+            {
+              text: "午后，TA 没找到心心念念的那本书，有些失落。",
+              options: [
+                { label: "陪 TA 问店员，记下下次到书的时间", score: 2 },
+                { label: "并肩坐下，分享各自喜欢的一页", score: 1 },
+                { label: "觉得浪费时间，独自离开", score: -1 },
+              ],
+            },
+            {
+              text: "晚上，TA 把一张书签放进你的书里，等你开口。",
+              options: [
+                { label: "告诉 TA 很珍惜这一天，也愿意认真听 TA 的感受", score: 2 },
+                { label: "“明天也一起读一会儿吧。”", score: 1 },
+                { label: "把书合上，继续打游戏", score: -2 },
+              ],
+            },
+          ],
+        },
+      ];
+
+      const branchEndings = {
+        quiet: {
+          title: "安静相伴结局",
+          text: "你们没有安排盛大的惊喜，却三次选择为彼此放慢脚步。睡前，两人约好每周留一段不赶时间的独处时光。",
+        },
+        repair: {
+          title: "主动和解结局",
+          text: "早晨的急躁并没有被一句晚安带过。你重新提起那一刻，为自己的疏忽道歉；TA 也说出了委屈。你们约好，下次着急时先说清楚，再一起决定。",
+        },
+      };
+
+      let index = 0;
+      let love = 0;
+      let round = 0;
+      let picks = [];
+      const discovered = new Set();
+
+      const sceneEl = document.getElementById("scene");
+      const choicesEl = document.getElementById("choices");
+      const scoreEl = document.getElementById("loveScore");
+      const sceneIndexEl = document.getElementById("sceneIndex");
+      const resultEl = document.getElementById("result");
+      const replayStatusEl = document.getElementById("replayStatus");
+
+      function currentDate() {
+        return dates[round % dates.length];
+      }
+
+      function renderReplayStatus() {
+        replayStatusEl.textContent = `第 ${round + 1} 次约会 · ${currentDate().name} · 结局 ${discovered.size}/5`;
+      }
+
+      function renderStep() {
+        const step = currentDate().steps[index];
+        sceneEl.textContent = step.text;
+        choicesEl.innerHTML = "";
+
+        step.options.forEach((option, optionIndex) => {
+          const button = document.createElement("button");
+          button.textContent = option.label;
+          const expectedIndex = index;
+          const expectedRound = round;
+          button.addEventListener("click", () => {
+            // 旧按钮的重复事件不能跳过下一幕或影响新一轮。
+            if (index === expectedIndex && round === expectedRound) pick(optionIndex);
+          });
+          choicesEl.appendChild(button);
+        });
+
+        scoreEl.textContent = love;
+        sceneIndexEl.textContent = index + 1;
+        renderReplayStatus();
+      }
+
+      function pick(optionIndex) {
+        if (index >= steps.length) return;
+        love += currentDate().steps[index].options[optionIndex].score;
+        picks.push(optionIndex);
+        index += 1;
+
+        if (index >= steps.length) {
+          showEnding();
+          return;
+        }
+
+        renderStep();
+      }
+
+      function showEnding() {
+        scoreEl.textContent = love;
+        sceneEl.textContent = "一天结束啦，来看看你们的恋爱结局：";
+        choicesEl.innerHTML = "";
+        sceneIndexEl.textContent = steps.length;
+
+        // 特殊路线优先；其余组合仍使用原有好感度阈值。
+        const ending = picks.every((choice) => choice === 1)
+          ? branchEndings.quiet
+          : picks[0] === 2 && picks[1] !== 2 && picks[2] === 0
+            ? branchEndings.repair
+            : endings.find((item) => love >= item.min);
+        discovered.add(ending.title);
+        renderReplayStatus();
+        resultEl.hidden = false;
+        resultEl.innerHTML = `<strong>${ending.title}</strong><br>${ending.text}<br><br>最终好感度：${love}`;
+
+        const restart = document.createElement("button");
+        restart.className = "primary";
+        restart.textContent = "再玩一次";
+        restart.addEventListener("click", () => {
+          if (resultEl.hidden) return;
+          index = 0;
+          love = 0;
+          picks = [];
+          round += 1;
+          resultEl.hidden = true;
+          resultEl.textContent = "";
+          renderStep();
+        });
+        choicesEl.appendChild(restart);
+      }
+
+      renderStep();
+    </script>
+  </body>
+</html>
